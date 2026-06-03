@@ -47,6 +47,24 @@ router.post('/', authMiddleware, requireRole('dueño'), async (req, res) => {
   res.status(201).json(comercio);
 });
 
+router.get('/me', authMiddleware, async (req, res) => {
+  if (!req.user.comercio_id) {
+    return res.status(404).json({ error: 'No tienes un comercio asignado' });
+  }
+
+  const { data: comercio, error } = await supabase
+    .from('comercios')
+    .select('*')
+    .eq('id', req.user.comercio_id)
+    .single();
+
+  if (error || !comercio) {
+    return res.status(404).json({ error: 'Comercio no encontrado' });
+  }
+
+  res.json(comercio);
+});
+
 router.get('/:codigo', async (req, res) => {
   const { codigo } = req.params;
 
