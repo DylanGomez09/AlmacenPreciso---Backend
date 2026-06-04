@@ -5,10 +5,12 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 const router = Router();
 
 router.get('/', authMiddleware, requireRole('dueño'), async (req, res) => {
+  const comercioId = req.query.comercio_id || req.user.comercio_id;
+
   const { data: empleados, error } = await supabase
     .from('usuarios')
     .select('*')
-    .eq('comercio_id', req.user.comercio_id)
+    .eq('comercio_id', comercioId)
     .eq('rol', 'empleado');
 
   if (error) {

@@ -56,7 +56,7 @@ router.patch('/:id/estado', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { estado } = req.body;
 
-  const estadosValidos = ['activo', 'comprado', 'pendiente_borrado'];
+  const estadosValidos = ['activo', 'comprado', 'pendiente_borrado', 'aprobado', 'rechazado'];
   if (!estadosValidos.includes(estado)) {
     return res.status(400).json({ error: `Estado inválido. Válidos: ${estadosValidos.join(', ')}` });
   }
@@ -73,16 +73,37 @@ router.patch('/:id/estado', authMiddleware, async (req, res) => {
   }
 
   if (req.user.rol === 'empleado') {
-    if (estado !== 'pendiente_borrado') {
+    if (estado !== 'pendiente_borrado' && estado !== 'comprado' && estado !== 'activo') {
       return res.status(403).json({
-        error: 'Como empleado solo puedes solicitar la eliminación (estado: pendiente_borrado)',
+        error: 'Como empleado solo puedes cambiar a: activo, comprado o pendiente_borrado',
       });
     }
   }
 
+  if ((estado === 'aprobado' || estado === 'rechazado') && req.user.rol !== 'dueño') {
+    return res.status(403).json({
+      error: 'Solo el dueño puede aprobar o rechazar',
+    });
+  }
+
+  if (estado === 'aprobado') {
+    const { error } = await supabase
+      .from('faltantes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ mensaje: 'Faltante eliminado correctamente' });
+  }
+
+  const nuevoEstado = estado === 'rechazado' ? 'activo' : estado;
+
   const { data, error } = await supabase
     .from('faltantes')
-    .update({ estado, actualizado_por: req.user.nombre })
+    .update({ estado: nuevoEstado, actualizado_por: req.user.nombre })
     .eq('id', id)
     .select()
     .single();
@@ -94,7 +115,7 @@ router.patch('/:id/estado', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
-router.delete('/:id/aprobar', authMiddleware, requireRole('dueño'), async (req, res) => {
+router.delete('/:id', authMiddleware, requireRole('dueño'), async (req, res) => {
   const { id } = req.params;
 
   const { data: faltante, error: findError } = await supabase
@@ -118,34 +139,6 @@ router.delete('/:id/aprobar', authMiddleware, requireRole('dueño'), async (req,
   }
 
   res.json({ mensaje: 'Faltante eliminado correctamente' });
-});
-
-router.patch('/:id/rechazar', authMiddleware, requireRole('dueño'), async (req, res) => {
-  const { id } = req.params;
-
-  const { data: faltante, error: findError } = await supabase
-    .from('faltantes')
-    .select('*')
-    .eq('id', id)
-    .eq('comercio_id', req.user.comercio_id)
-    .single();
-
-  if (findError || !faltante) {
-    return res.status(404).json({ error: 'Faltante no encontrado' });
-  }
-
-  const { data, error } = await supabase
-    .from('faltantes')
-    .update({ estado: 'activo', actualizado_por: req.user.nombre })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
-  res.json(data);
 });
 
 module.exports = router;
