@@ -88,4 +88,37 @@ router.get('/me', authMiddleware, async (req, res) => {
   res.json(req.user);
 });
 
+router.post('/join', authMiddleware, async (req, res) => {
+  const { codigo_unico } = req.body;
+
+  if (!codigo_unico) {
+    return res.status(400).json({ message: 'codigo_unico es obligatorio' });
+  }
+
+  const { data: comercio, error: comercioError } = await supabase
+    .from('comercios')
+    .select('*')
+    .eq('codigo_unico', codigo_unico.toUpperCase())
+    .single();
+
+  if (comercioError || !comercio) {
+    return res.status(404).json({ message: 'Código de unión inválido' });
+  }
+
+  if (req.user.comercio_id) {
+    return res.status(400).json({ message: 'Ya perteneces a un almacén' });
+  }
+
+  const { error: updateError } = await supabase
+    .from('usuarios')
+    .update({ comercio_id: comercio.id })
+    .eq('id', req.user.id);
+
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message });
+  }
+
+  res.json({ message: 'Te has unido al equipo', comercio_id: comercio.id });
+});
+
 module.exports = router;
