@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const supabase = require('../db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { notificarDuenio } = require('../notificaciones');
 
 const router = Router();
 
@@ -48,6 +49,12 @@ router.post('/', authMiddleware, async (req, res) => {
   if (error) {
     return res.status(400).json({ error: error.message });
   }
+
+  notificarDuenio(
+    req.user.comercio_id,
+    'Nuevo faltante',
+    `${data.nombre} fue reportado como faltante`
+  );
 
   res.status(201).json(data);
 });

@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const supabase = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { notificarDuenio } = require('../notificaciones');
 
 const router = Router();
 
@@ -117,6 +118,12 @@ router.post('/join', authMiddleware, async (req, res) => {
   if (updateError) {
     return res.status(500).json({ error: updateError.message });
   }
+
+  notificarDuenio(
+    comercio.id,
+    'Nuevo miembro en el equipo',
+    `${req.user.nombre} se unió al almacén`
+  );
 
   res.json({ message: 'Te has unido al equipo', comercio_id: comercio.id });
 });

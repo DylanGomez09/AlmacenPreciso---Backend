@@ -64,4 +64,23 @@ router.post('/invitar', authMiddleware, requireRole('dueño'), async (req, res) 
   });
 });
 
+router.post('/push-token', authMiddleware, async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: 'El token es obligatorio' });
+  }
+
+  const { error } = await supabase
+    .from('usuarios')
+    .update({ push_token: token })
+    .eq('id', req.user.id);
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  res.json({ mensaje: 'Token registrado correctamente' });
+});
+
 module.exports = router;
