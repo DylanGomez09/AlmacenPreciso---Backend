@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const supabase = require('../db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
-const { notificarDuenio } = require('../notificaciones');
+const { enviarPushAPorRol } = require('../notificaciones');
 
 const router = Router();
 
@@ -50,10 +50,11 @@ router.post('/', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  notificarDuenio(
+  enviarPushAPorRol(
     req.user.comercio_id,
+    'dueño',
     'Nuevo faltante',
-    `${data.nombre} fue reportado como faltante`
+    `${req.user.nombre} reportó: ${data.nombre}`
   );
 
   res.status(201).json(data);
@@ -103,6 +104,13 @@ router.patch('/:id/estado', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
+    enviarPushAPorRol(
+      req.user.comercio_id,
+      'empleado',
+      'Faltante aprobado',
+      `${req.user.nombre} aprobó: ${faltante.nombre}`
+    );
+
     return res.json({ mensaje: 'Faltante eliminado correctamente' });
   }
 
@@ -117,6 +125,22 @@ router.patch('/:id/estado', authMiddleware, async (req, res) => {
 
   if (error) {
     return res.status(400).json({ error: error.message });
+  }
+
+  if (req.user.rol === 'empleado') {
+    enviarPushAPorRol(
+      req.user.comercio_id,
+      'dueño',
+      'Faltante actualizado',
+      `${req.user.nombre} marcó ${faltante.nombre} como ${nuevoEstado}`
+    );
+  } else if (estado === 'rechazado') {
+    enviarPushAPorRol(
+      req.user.comercio_id,
+      'empleado',
+      'Faltante rechazado',
+      `${req.user.nombre} rechazó: ${faltante.nombre}`
+    );
   }
 
   res.json(data);

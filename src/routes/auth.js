@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const supabase = require('../db');
 const { authMiddleware } = require('../middleware/auth');
-const { notificarDuenio } = require('../notificaciones');
+const { enviarPushAPorRol } = require('../notificaciones');
 const {
   hashToken,
   storeRefreshToken,
@@ -146,8 +146,9 @@ router.post('/join', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: updateError.message });
   }
 
-  notificarDuenio(
+  enviarPushAPorRol(
     comercio.id,
+    'dueño',
     'Nuevo miembro en el equipo',
     `${req.user.nombre} se unió al almacén`
   );
