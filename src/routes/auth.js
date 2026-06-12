@@ -2,6 +2,12 @@ const { Router } = require('express');
 const supabase = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { notificarDuenio } = require('../notificaciones');
+const {
+  hashToken,
+  storeRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserRefreshTokens,
+} = require('../helpers/tokens');
 
 const router = Router();
 
@@ -47,6 +53,20 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: perfilError.message });
   }
 
+  if (authData.session) {
+    const refreshToken = authData.session.refresh_token;
+    const expiresAt = new Date(
+      Date.now() + authData.session.expires_in * 1000
+    ).toISOString();
+    await storeRefreshToken(authData.user.id, refreshToken, expiresAt);
+
+    return res.status(201).json({
+      access_token: authData.session.access_token,
+      refresh_token: refreshToken,
+      usuario: perfil,
+    });
+  }
+
   res.status(201).json({
     mensaje: 'Usuario registrado correctamente',
     usuario: perfil,
@@ -79,8 +99,15 @@ router.post('/login', async (req, res) => {
     return res.status(500).json({ error: 'Error al obtener perfil de usuario' });
   }
 
+  const refreshToken = authData.session.refresh_token;
+  const expiresAt = new Date(
+    Date.now() + authData.session.expires_in * 1000
+  ).toISOString();
+  await storeRefreshToken(authData.user.id, refreshToken, expiresAt);
+
   res.json({
-    token: authData.session.access_token,
+    access_token: authData.session.access_token,
+    refresh_token: refreshToken,
     usuario: perfil,
   });
 });
@@ -126,6 +153,60 @@ router.post('/join', authMiddleware, async (req, res) => {
   );
 
   res.json({ message: 'Te has unido al equipo', comercio_id: comercio.id });
+});
+
+router.post('/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+
+  if (!refresh_token) {
+    return res.status(400).json({ error: 'refresh_token es obligatorio' });
+  }
+
+  const tokenHash = hashToken(refresh_token);
+
+  const { data: storedToken, error: findError } = await supabase
+    .from('refresh_tokens')
+    .select('*')
+    .eq('token_hash', tokenHash)
+    .single();
+
+  if (findError || !storedToken) {
+    return res.status(401).json({ message: 'Refresh token inválido o expirado' });
+  }
+
+  if (storedToken.revoked_at) {
+    return res.status(401).json({ message: 'Refresh token inválido o expirado' });
+  }
+
+  if (new Date(storedToken.expires_at) < new Date()) {
+    return res.status(401).json({ message: 'Refresh token inválido o expirado' });
+  }
+
+  const { data: refreshData, error: refreshError } =
+    await supabase.auth.refreshSession({ refresh_token });
+
+  if (refreshError || !refreshData.session) {
+    return res.status(401).json({ message: 'Refresh token inválido o expirado' });
+  }
+
+  await revokeRefreshToken(tokenHash);
+
+  const newRefreshToken = refreshData.session.refresh_token;
+  const newExpiresAt = new Date(
+    Date.now() + refreshData.session.expires_in * 1000
+  ).toISOString();
+  await storeRefreshToken(refreshData.user.id, newRefreshToken, newExpiresAt);
+
+  res.json({
+    access_token: refreshData.session.access_token,
+    refresh_token: newRefreshToken,
+  });
+});
+
+router.post('/logout', authMiddleware, async (req, res) => {
+  await revokeAllUserRefreshTokens(req.user.id);
+
+  res.json({ message: 'Sesión cerrada correctamente' });
 });
 
 module.exports = router;
